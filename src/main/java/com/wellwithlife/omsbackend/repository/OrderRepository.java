@@ -1,6 +1,8 @@
 package com.wellwithlife.omsbackend.repository;
 
 import com.wellwithlife.omsbackend.entity.Order;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -23,4 +25,28 @@ public interface OrderRepository extends JpaRepository<Order, Long> {
     // Reference screen stats count
     @Query("SELECT COUNT(o) FROM Order o WHERE o.status = :status")
     long countByStatus(@Param("status") String status);
+
+    // KPI Counters
+//    long countByStatus(String status);
+
+    @Query("SELECT COUNT(o) FROM Order o JOIN o.fulfillment f WHERE f.deliveryStatus = :deliveryStatus")
+    long countByDeliveryStatus(@Param("deliveryStatus") String deliveryStatus);
+
+    // Main Fulfillment Table Filter Query
+    @Query("SELECT o FROM Order o LEFT JOIN o.fulfillment f WHERE " +
+            "(:status IS NULL OR o.status = :status) AND " +
+            "(:bdeId IS NULL OR o.createdBy.userId = :bdeId) AND " +
+            "(:deliveryStatus IS NULL OR f.deliveryStatus = :deliveryStatus) AND " +
+            "(:search IS NULL OR LOWER(o.customerName) LIKE LOWER(CONCAT('%', :search, '%')) " +
+            " OR LOWER(o.referenceCode) LIKE LOWER(CONCAT('%', :search, '%')) " +
+            " OR o.phone LIKE CONCAT('%', :search, '%'))")
+    Page<Order> findOrdersWithFilters(
+            @Param("status") String status,
+            @Param("bdeId") Long bdeId,
+            @Param("deliveryStatus") String deliveryStatus,
+            @Param("search") String search,
+            Pageable pageable
+    );
+
+
 }

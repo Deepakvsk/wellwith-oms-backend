@@ -1,7 +1,9 @@
 package com.wellwithlife.omsbackend.controller;
 
 import com.wellwithlife.omsbackend.dto.CreateOrderRequest;
+import com.wellwithlife.omsbackend.dto.DashboardStatsResponse;
 import com.wellwithlife.omsbackend.dto.OrderResponse;
+import com.wellwithlife.omsbackend.dto.UpdateOrderRequest;
 import com.wellwithlife.omsbackend.entity.Order;
 import com.wellwithlife.omsbackend.entity.User;
 import com.wellwithlife.omsbackend.repository.UserRepository;
@@ -68,4 +70,49 @@ public class OrderController {
         Order syncedOrder = easyecomService.pushOrderToEasyecom(orderId, admin);
         return ResponseEntity.ok(orderService.mapToOrderResponse(syncedOrder));
     }
+
+
+    // 1. Dashboard Top KPI Stats
+    @GetMapping("/dashboard-stats")
+    @PreAuthorize("hasAnyRole('ADMIN', 'SUPERADMIN')")
+    public ResponseEntity<DashboardStatsResponse> getStats() {
+        return ResponseEntity.ok(orderService.getDashboardStats());
+    }
+
+    // 2. Main Fulfillment Table (Search, Filter & Pagination)
+    @GetMapping
+    @PreAuthorize("hasAnyRole('ADMIN', 'SUPERADMIN')")
+    public ResponseEntity<org.springframework.data.domain.Page<OrderResponse>> getAllOrders(
+            @RequestParam(required = false) String status,
+            @RequestParam(required = false) Long bdeId,
+            @RequestParam(required = false) String deliveryStatus,
+            @RequestParam(required = false) String search,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size
+    ) {
+        org.springframework.data.domain.Pageable pageable =
+                org.springframework.data.domain.PageRequest.of(page, size, org.springframework.data.domain.Sort.by("createdAt").descending());
+        return ResponseEntity.ok(orderService.getAllOrdersFiltered(status, bdeId, deliveryStatus, search, pageable));
+    }
+
+    // 3. Edit Order Details (Before Sync)
+    @PutMapping("/{orderId}")
+    @PreAuthorize("hasAnyRole('ADMIN', 'SUPERADMIN')")
+    public ResponseEntity<OrderResponse> updateOrder(
+            @PathVariable Long orderId,
+            @Valid @RequestBody UpdateOrderRequest request
+    ) {
+        return ResponseEntity.ok(orderService.updateOrder(orderId, request));
+    }
+
+    // 4. Reject Order
+    @PostMapping("/{orderId}/reject")
+    @PreAuthorize("hasAnyRole('ADMIN', 'SUPERADMIN')")
+    public ResponseEntity<OrderResponse> rejectOrder(
+            @PathVariable Long orderId,
+            @RequestParam(defaultValue = "Rejected by Admin") String reason
+    ) {
+        return ResponseEntity.ok(orderService.rejectOrder(orderId, reason));
+    }
+
 }

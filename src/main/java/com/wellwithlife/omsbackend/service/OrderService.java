@@ -1,7 +1,9 @@
 package com.wellwithlife.omsbackend.service;
 
 import com.wellwithlife.omsbackend.dto.CreateOrderRequest;
+import com.wellwithlife.omsbackend.dto.DashboardStatsResponse;
 import com.wellwithlife.omsbackend.dto.OrderResponse;
+import com.wellwithlife.omsbackend.dto.UpdateOrderRequest;
 import com.wellwithlife.omsbackend.entity.Order;
 import com.wellwithlife.omsbackend.entity.OrderItem;
 import com.wellwithlife.omsbackend.entity.User;
@@ -109,4 +111,61 @@ public class OrderService {
                         .build()).collect(Collectors.toList()) : Collections.emptyList())
                 .build();
     }
+
+    // 1. Dashboard KPI Cards Stats
+    @Transactional(readOnly = true)
+    public DashboardStatsResponse getDashboardStats() {
+        return DashboardStatsResponse.builder()
+                .pendingFulfillment(orderRepository.countByStatus("PENDING_APPROVAL"))
+                .fulfilled(orderRepository.countByStatus("SYNCED_TO_EASYECOM"))
+                .inTransit(orderRepository.countByDeliveryStatus("IN_TRANSIT"))
+                .delivered(orderRepository.countByDeliveryStatus("DELIVERED"))
+                .rto(orderRepository.countByDeliveryStatus("RTO"))
+                .syncFailed(orderRepository.countByStatus("SYNC_FAILED"))
+                .build();
+    }
+
+    // 2. All Orders with Filter and Pagination (Main Table)
+    @Transactional(readOnly = true)
+    public org.springframework.data.domain.Page<OrderResponse> getAllOrdersFiltered(
+            String status, Long bdeId, String deliveryStatus, String search, org.springframework.data.domain.Pageable pageable
+    ) {
+        return orderRepository.findOrdersWithFilters(status, bdeId, deliveryStatus, search, pageable)
+                .map(this::mapToOrderResponse);
+    }
+
+    // 3. Admin Order Verification & Update
+    @Transactional
+    public OrderResponse updateOrder(Long orderId, UpdateOrderRequest request) {
+        Order order = orderRepository.findById(orderId)
+                .orElseThrow(() -> new IllegalArgumentException("Order not found with ID: " + orderId));
+
+        if ("SYNCED_TO_EASYECOM".equalsIgnoreCase(order.getStatus())) {
+            throw new IllegalStateException("Cannot edit order once synced to Easyecom!");
+        }
+
+        order.setCustomerName(request.getCustomerName());
+        order.setPhone(request.getPhone());
+        order.setEmail(request.getEmail());
+        order.setAddress(request.getAddress());
+        order.setCity(request.getCity());
+        order.setState(request.getState());
+        order.setPincode(request.getPincode());
+        if (request.getOrderType() != null) {
+            order.setOrderType(request.getOrderType());
+        }
+
+        return mapToOrderResponse(orderRepository.save(order));
+    }
+
+    // 4. Admin Reject Order
+    @Transactional
+    public OrderResponse rejectOrder(Long orderId, String reason) {
+        Order order = orderRepository.findById(orderId)
+                .orElseThrow(() -> new IllegalArgumentException("Order not found with ID: " + orderId));
+
+        order.setStatus("REJECTED");
+        return mapToOrderResponse(orderRepository.save(order));
+    }
+
 }
