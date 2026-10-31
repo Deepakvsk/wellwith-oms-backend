@@ -98,6 +98,7 @@ public class OrderService {
                 .amountToCollect(order.getAmountToCollect())
                 .createdByName(order.getCreatedBy() != null ? order.getCreatedBy().getName() : "N/A")
                 .easyecomOrderId(order.getFulfillment() != null ? order.getFulfillment().getEasyecomOrderId() : null)
+                .shippingPartner(order.getFulfillment() != null ? order.getFulfillment().getShippingPartner() : null)
                 .awbNumber(order.getFulfillment() != null ? order.getFulfillment().getAwbNumber() : null)
                 .deliveryLink(order.getFulfillment() != null ? order.getFulfillment().getDeliveryLink() : null)
                 .deliveryStatus(order.getFulfillment() != null ? order.getFulfillment().getDeliveryStatus() : "PENDING")

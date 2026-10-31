@@ -32,14 +32,15 @@ public interface OrderRepository extends JpaRepository<Order, Long> {
     @Query("SELECT COUNT(o) FROM Order o JOIN o.fulfillment f WHERE f.deliveryStatus = :deliveryStatus")
     long countByDeliveryStatus(@Param("deliveryStatus") String deliveryStatus);
 
-    // Main Fulfillment Table Filter Query
+    // Fail-safe Filter Query: checks both null and empty values
     @Query("SELECT o FROM Order o LEFT JOIN o.fulfillment f WHERE " +
-            "(:status IS NULL OR o.status = :status) AND " +
+            "(:status IS NULL OR :status = '' OR o.status = :status) AND " +
             "(:bdeId IS NULL OR o.createdBy.userId = :bdeId) AND " +
-            "(:deliveryStatus IS NULL OR f.deliveryStatus = :deliveryStatus) AND " +
-            "(:search IS NULL OR LOWER(o.customerName) LIKE LOWER(CONCAT('%', :search, '%')) " +
-            " OR LOWER(o.referenceCode) LIKE LOWER(CONCAT('%', :search, '%')) " +
-            " OR o.phone LIKE CONCAT('%', :search, '%'))")
+            "(:deliveryStatus IS NULL OR :deliveryStatus = '' OR f.deliveryStatus = :deliveryStatus) AND " +
+            "(:search IS NULL OR :search = '' OR " +
+            " LOWER(o.customerName) LIKE LOWER(CONCAT('%', :search, '%')) OR " +
+            " LOWER(o.referenceCode) LIKE LOWER(CONCAT('%', :search, '%')) OR " +
+            " o.phone LIKE CONCAT('%', :search, '%'))")
     Page<Order> findOrdersWithFilters(
             @Param("status") String status,
             @Param("bdeId") Long bdeId,
@@ -48,5 +49,8 @@ public interface OrderRepository extends JpaRepository<Order, Long> {
             Pageable pageable
     );
 
+    List<Order> findByStatus(String syncedToEasyecom);
 
+    @Query("SELECT o FROM Order o LEFT JOIN o.fulfillment f WHERE o.status IN ('SYNCED_TO_EASYECOM', 'CONFIRMED') AND (f.awbNumber IS NULL OR f.awbNumber = '')")
+    List<Order> findOrdersPendingEasyecomSync();
 }

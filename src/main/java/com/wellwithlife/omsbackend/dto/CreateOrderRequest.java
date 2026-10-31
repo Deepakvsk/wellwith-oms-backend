@@ -1,6 +1,8 @@
 package com.wellwithlife.omsbackend.dto;
 
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.DecimalMax;
+import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
@@ -37,6 +39,25 @@ public class CreateOrderRequest {
 
     @NotBlank(message = "Order type (PREPAID/COD) is required")
     private String orderType;
+
+    // --- New Fields: Other Charges ---
+    private BigDecimal otherCharges = BigDecimal.ZERO;
+
+    private String otherChargesDescription;
+
+    // --- New Fields: Discount ---
+    @DecimalMin(value = "0.0", message = "Discount percentage cannot be negative")
+    @DecimalMax(value = "10.0", message = "Maximum allowed discount is 10%")
+    private BigDecimal discountPercentage = BigDecimal.ZERO;
+
+    private BigDecimal discountAmount = BigDecimal.ZERO;
+
+    // --- New Fields: Payment Details & Notes ---
+    private String paymentType; // COD, UPI, NETBANKING, CARD
+
+    private String paymentScreenshotUrl;
+
+    private String notes;
 
     @NotNull(message = "Total amount is required")
     private BigDecimal totalAmount;

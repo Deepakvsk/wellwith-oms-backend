@@ -6,6 +6,7 @@ import com.wellwithlife.omsbackend.dto.OrderResponse;
 import com.wellwithlife.omsbackend.dto.UpdateOrderRequest;
 import com.wellwithlife.omsbackend.entity.Order;
 import com.wellwithlife.omsbackend.entity.User;
+import com.wellwithlife.omsbackend.repository.OrderRepository;
 import com.wellwithlife.omsbackend.repository.UserRepository;
 import com.wellwithlife.omsbackend.service.EasyecomService;
 import com.wellwithlife.omsbackend.service.OrderService;
@@ -18,6 +19,7 @@ import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/orders")
@@ -28,6 +30,7 @@ public class OrderController {
     private final OrderService orderService;
     private final EasyecomService easyecomService;
     private final UserRepository userRepository;
+    private final OrderRepository orderRepository;
 
     @PostMapping
     public ResponseEntity<OrderResponse> createOrder(
@@ -71,7 +74,6 @@ public class OrderController {
         return ResponseEntity.ok(orderService.mapToOrderResponse(syncedOrder));
     }
 
-
     // 1. Dashboard Top KPI Stats
     @GetMapping("/dashboard-stats")
     @PreAuthorize("hasAnyRole('ADMIN', 'SUPERADMIN')")
@@ -95,14 +97,33 @@ public class OrderController {
         return ResponseEntity.ok(orderService.getAllOrdersFiltered(status, bdeId, deliveryStatus, search, pageable));
     }
 
-    // 3. Edit Order Details (Before Sync)
+    // 3. Edit Order Details (Pre-Sync Check Guard)
     @PutMapping("/{orderId}")
-    @PreAuthorize("hasAnyRole('ADMIN', 'SUPERADMIN')")
-    public ResponseEntity<OrderResponse> updateOrder(
+    @PreAuthorize("hasAnyRole('ADMIN', 'SUPERADMIN', 'BDE')")
+    public ResponseEntity<?> updateOrder(
             @PathVariable Long orderId,
-            @Valid @RequestBody UpdateOrderRequest request
+            @RequestBody Map<String, Object> updates
     ) {
-        return ResponseEntity.ok(orderService.updateOrder(orderId, request));
+        Order order = orderRepository.findById(orderId)
+                .orElseThrow(() -> new IllegalArgumentException("Order not found with ID: " + orderId));
+
+        // Guard: Synced ya Confirmed order edit nahi ho sakta
+        if ("SYNCED_TO_EASYECOM".equalsIgnoreCase(order.getStatus()) || "CONFIRMED".equalsIgnoreCase(order.getStatus())) {
+            return ResponseEntity.badRequest().body(Map.of("message", "Synced ya Confirmed orders edit nahi kiye ja sakte!"));
+        }
+
+        if (updates.containsKey("customerName")) order.setCustomerName((String) updates.get("customerName"));
+        if (updates.containsKey("phone")) order.setPhone((String) updates.get("phone"));
+        if (updates.containsKey("email")) order.setEmail((String) updates.get("email"));
+        if (updates.containsKey("address")) order.setAddress((String) updates.get("address"));
+        if (updates.containsKey("city")) order.setCity((String) updates.get("city"));
+        if (updates.containsKey("state")) order.setState((String) updates.get("state"));
+        if (updates.containsKey("pincode")) order.setPincode((String) updates.get("pincode"));
+        if (updates.containsKey("paymentType")) order.setPaymentType((String) updates.get("paymentType"));
+        if (updates.containsKey("notes")) order.setNotes((String) updates.get("notes"));
+
+        Order savedOrder = orderRepository.save(order);
+        return ResponseEntity.ok(orderService.mapToOrderResponse(savedOrder));
     }
 
     // 4. Reject Order
@@ -113,6 +134,42 @@ public class OrderController {
             @RequestParam(defaultValue = "Rejected by Admin") String reason
     ) {
         return ResponseEntity.ok(orderService.rejectOrder(orderId, reason));
+    }
+
+    // 5. Verify live EasyEcom status on demand
+    @GetMapping("/{orderId}/verify-easyecom-status")
+    @PreAuthorize("hasAnyRole('ADMIN', 'SUPERADMIN', 'BDE')")
+    public ResponseEntity<?> verifyOrderStatus(@PathVariable Long orderId) {
+        Order order = orderRepository.findById(orderId)
+                .orElseThrow(() -> new IllegalArgumentException("Order not found"));
+
+        Map<String, Object> liveStatus = easyecomService.checkLiveOrderStatus(order.getReferenceCode());
+
+        String omsStatus = (String) liveStatus.get("omsStatus");
+        if ("FAILED_OUT_OF_STOCK".equals(omsStatus) || "STOCK_FAILED".equals(omsStatus)) {
+            order.setStatus("STOCK_FAILED");
+            if (order.getFulfillment() != null) {
+                order.getFulfillment().setSyncErrorPayload("EasyEcom: Inventory Assigned Failed / Out of stock");
+            }
+        } else if ("CONFIRMED".equals(omsStatus) || "CONFIRMED_DISPATCHED".equals(omsStatus)) {
+            order.setStatus("CONFIRMED");
+        }
+
+        orderRepository.save(order);
+
+        return ResponseEntity.ok(Map.of(
+                "orderId", orderId,
+                "referenceCode", order.getReferenceCode(),
+                "liveStatus", liveStatus,
+                "currentOmsStatus", order.getStatus()
+        ));
+    }
+
+    // 6. Get EasyEcom live products master
+    @GetMapping("/easyecom/products")
+    @PreAuthorize("hasAnyRole('SUPERADMIN', 'ADMIN', 'BDE')")
+    public ResponseEntity<?> getEasyecomProducts() {
+        return ResponseEntity.ok(easyecomService.fetchProductMaster());
     }
 
 }

@@ -24,6 +24,7 @@ public class OrderResponse {
     private String createdByName;
     private String easyecomOrderId;
     private String awbNumber;
+    private String shippingPartner;
     private String deliveryLink;
     private String deliveryStatus;
     private LocalDateTime createdAt;

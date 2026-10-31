@@ -79,6 +79,36 @@ public class Order {
     @OneToOne(mappedBy = "order", cascade = CascadeType.ALL)
     private OrderFulfillment fulfillment;
 
+    // --- Other Charges ---
+    @Column(name = "other_charges")
+    private BigDecimal otherCharges = BigDecimal.ZERO;
+
+    @Column(name = "other_charges_desc")
+    private String otherChargesDescription;
+
+    // --- Discount ---
+    @Column(name = "discount_percentage")
+    private BigDecimal discountPercentage = BigDecimal.ZERO;
+
+    @Column(name = "discount_amount")
+    private BigDecimal discountAmount = BigDecimal.ZERO;
+
+    // --- Payment & Notes ---
+    @Column(name = "payment_type")
+    private String paymentType; // COD, PREPAID, PARTIAL_COD
+
+    @Column(name = "payment_screenshot_url")
+    private String paymentScreenshotUrl;
+
+    @Column(name = "notes", columnDefinition = "TEXT")
+    private String notes;
+
+    @Column(name = "is_free_product")
+    private Boolean isFreeProduct = false;
+
+    @Column(name = "line_total")
+    private BigDecimal lineTotal = BigDecimal.ZERO;
+
     @Column(name = "created_at", updatable = false)
     private LocalDateTime createdAt;
 
