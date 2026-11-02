@@ -14,12 +14,16 @@ public class OrderResponse {
     private String referenceCode;
     private String customerName;
     private String phone;
+    private String email;
     private String city;
     private String state;
     private String pincode;
     private String orderType;
+    private String notes;
     private String status;
     private BigDecimal totalAmount;
+    private BigDecimal discountPercentage;
+    private BigDecimal discountAmount;
     private BigDecimal amountToCollect;
     private String createdByName;
     private String easyecomOrderId;

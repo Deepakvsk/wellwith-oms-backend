@@ -19,10 +19,7 @@ import org.springframework.web.reactive.function.client.WebClientResponseExcepti
 
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.concurrent.atomic.AtomicInteger;
 
 @Service
@@ -106,18 +103,15 @@ public class EasyecomService {
             throw new IllegalStateException("Order is already synced to Easyecom!");
         }
 
-        // 1. Token fetch (Cached)
+        // 1. Fetch JWT Token (Cached)
         String jwtToken = getJwtToken();
 
-        // 2. Line Items Mapping with index-based safe unique item IDs (fixes getOrderItemId error)
+        // 2. Line Items Mapping with index-based safe unique item IDs
         AtomicInteger itemIndex = new AtomicInteger(1);
-        List<Map<String, Object>> items = new ArrayList<>();
+        List items = new ArrayList<>();
 
         for (OrderItem i : order.getItems()) {
-
-
-
-            Map<String, Object> itemMap = new HashMap<>();
+            Map<String, Object> itemMap = new LinkedHashMap<>();
             itemMap.put("OrderItemId", "ITEM-" + order.getReferenceCode() + "-" + itemIndex.getAndIncrement());
             itemMap.put("Sku", i.getSkuCode());
             itemMap.put("productName", (i.getProductName() != null && !i.getProductName().isBlank()) ? i.getProductName() : i.getSkuCode());
@@ -128,67 +122,93 @@ public class EasyecomService {
         }
 
         DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
-        String formattedDate = order.getCreatedAt() != null
+        LocalDateTime now = LocalDateTime.now();
+
+        String orderDate = order.getCreatedAt() != null
                 ? order.getCreatedAt().format(formatter)
-                : LocalDateTime.now().format(formatter);
+                : now.format(formatter);
 
-        // 3. Billing & Shipping Address mapping (Clean typed maps)
-        Map<String, Object> billing = new HashMap<>();
-        billing.put("name", order.getCustomerName() != null ? order.getCustomerName() : "Customer");
-        billing.put("addressLine1", order.getAddress() != null ? order.getAddress() : "Address");
-        billing.put("addressLine2", "");
-        billing.put("postalCode", order.getPincode() != null ?  order.getPincode() : "");
-        billing.put("city", order.getCity() != null ? order.getCity() : "");
-        billing.put("state", order.getState() != null ? order.getState() : "");
+        String expDeliveryDate = now.plusDays(3).format(formatter);
+
+        // 3. Shipping Address Mapping (Priority: addressLine1 -> fallback to address)
+        String shipAddr1 = (order.getAddressLine1() != null && !order.getAddressLine1().isBlank())
+                ? order.getAddressLine1()
+                : (order.getAddress() != null ? order.getAddress() : "Address");
+        String shipAddr2 = order.getAddressLine2() != null ? order.getAddressLine2() : "";
+
+        Map<String, Object> shipping = new LinkedHashMap<>();
+        shipping.put("name", order.getCustomerName() != null ? order.getCustomerName() : "Customer");
+        shipping.put("addressLine1", shipAddr1);
+        shipping.put("addressLine2", shipAddr2);
+        shipping.put("postalCode", order.getPincode() != null ? order.getPincode() : "");
+        shipping.put("city", order.getCity() != null ? order.getCity() : "");
+        shipping.put("state", order.getState() != null ? order.getState() : "");
+        shipping.put("country", "India");
+        shipping.put("contact", order.getPhone() != null ? order.getPhone() : "");
+        shipping.put("email", (order.getEmail() != null && !order.getEmail().isBlank()) ? order.getEmail() : "support@wellwithlife.com");
+
+        // 4. Billing Address Mapping (Fallback to shipping address if billing details are absent)
+        Map<String, Object> billing = new LinkedHashMap<>();
+        billing.put("name", (order.getBillingName() != null && !order.getBillingName().isBlank()) ? order.getBillingName() : shipping.get("name"));
+        billing.put("addressLine1", (order.getBillingAddressLine1() != null && !order.getBillingAddressLine1().isBlank()) ? order.getBillingAddressLine1() : shipping.get("addressLine1"));
+        billing.put("addressLine2", order.getBillingAddressLine2() != null ? order.getBillingAddressLine2() : shipping.get("addressLine2"));
+        billing.put("postalCode", (order.getBillingPincode() != null && !order.getBillingPincode().isBlank()) ? order.getBillingPincode() : shipping.get("postalCode"));
+        billing.put("city", (order.getBillingCity() != null && !order.getBillingCity().isBlank()) ? order.getBillingCity() : shipping.get("city"));
+        billing.put("state", (order.getBillingState() != null && !order.getBillingState().isBlank()) ? order.getBillingState() : shipping.get("state"));
         billing.put("country", "India");
-        billing.put("contact", order.getPhone() != null ? order.getPhone() : "");
-        billing.put("email", (order.getEmail() != null && !order.getEmail().isBlank()) ? order.getEmail() : "support@wellwithlife.com");
+        billing.put("contact", (order.getBillingPhone() != null && !order.getBillingPhone().isBlank()) ? order.getBillingPhone() : shipping.get("contact"));
+        billing.put("email", shipping.get("email"));
 
-        Map<String, Object> shipping = new HashMap<>(billing);
-
-        Map<String, Object> customerObject = new HashMap<>();
+        Map<String, Object> customerObject = new LinkedHashMap<>();
+        if (order.getGstNumber() != null && !order.getGstNumber().isBlank()) {
+            customerObject.put("gst_number", order.getGstNumber());
+        }
         customerObject.put("billing", billing);
         customerObject.put("shipping", shipping);
 
-        List<Map<String, Object>> customerList = new ArrayList<>();
+        List customerList = new ArrayList<>();
         customerList.add(customerObject);
 
-        LocalDateTime now = LocalDateTime.now();
-        DateTimeFormatter formatter1 = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+        // 5. Payment Mode Sanitization
+        String rawPaymentType = order.getPaymentType() != null ? order.getPaymentType().trim().toUpperCase() : "COD";
+        boolean isCod = "COD".equals(rawPaymentType) || "CASH ON DELIVERY".equals(rawPaymentType) || "CASH".equals(rawPaymentType);
+        int paymentModeId = isCod ? 2 : 1; // 2 = COD, 1 = Prepaid/Online in standard EasyEcom API
 
-// Current order timestamp (agar order me null ho to now use karein)
-        String orderDate = order.getCreatedAt() != null
-                ? order.getCreatedAt().format(formatter1)
-                : now.format(formatter);
-
-// Expected delivery date: 3 din aage ka time
-        String expDeliveryDate = now.plusDays(3).format(formatter);
-
-        // 4. EasyEcom Retail Order Payload
-        boolean isCod = "COD".equalsIgnoreCase(order.getPaymentType());
-        int paymentModeId = isCod ? 2 : 5; // COD = 2, Prepaid = 5
-
-        Map<String, Object> payload = new HashMap<>();
+        // 6. EasyEcom Retail Order Payload Construction
+        Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("orderType", "retailorder");
         payload.put("marketplaceId", 10);
         payload.put("orderNumber", order.getReferenceCode());
-        payload.put("orderDate", orderDate);               // 👈 Yahan lag gaya
-        payload.put("expDeliveryDate", expDeliveryDate);   // 👈 Yeh nayi line add karni hai
-        payload.put("orderDate", formattedDate);
+        payload.put("orderDate", orderDate);
+        payload.put("expDeliveryDate", expDeliveryDate);
+        payload.put("remarks1", order.getRemarks1() != null ? order.getRemarks1() : (order.getNotes() != null ? order.getNotes() : ""));
+        payload.put("remarks2", order.getRemarks2() != null ? order.getRemarks2() : "");
         payload.put("shippingCost", order.getOtherCharges() != null ? order.getOtherCharges() : 0);
         payload.put("discount", order.getDiscountAmount() != null ? order.getDiscountAmount() : 0);
+        payload.put("walletDiscount", 0);
+        payload.put("promoCodeDiscount", 0);
+        payload.put("prepaidDiscount", 0);
         payload.put("paymentMode", paymentModeId);
+
+        // Gateway details are omitted completely for COD to satisfy EasyEcom validation
+        if (!isCod) {
+            payload.put("paymentGateway", "Online");
+            payload.put("paymentTransactionNumber", "TXN-" + System.currentTimeMillis());
+        }
+
         payload.put("shippingMethod", 1);
         payload.put("is_market_shipped", 0);
-        payload.put("packageWeight", 100);
-        payload.put("packageHeight", 10);
-        payload.put("packageWidth", 10);
-        payload.put("packageLength", 10);
-        payload.put("collectableAmount", isCod ? (order.getAmountToCollect() != null ? order.getAmountToCollect() : order.getTotalAmount()) : 0);
+        payload.put("packageWeight", order.getPackageWeight() != null ? order.getPackageWeight() : 100);
+        payload.put("packageHeight", order.getPackageHeight() != null ? order.getPackageHeight() : 10);
+        payload.put("packageWidth", order.getPackageWidth() != null ? order.getPackageWidth() : 10);
+        payload.put("packageLength", order.getPackageLength() != null ? order.getPackageLength() : 10);
+
+        Object codCollectAmount = order.getAmountToCollect() != null ? order.getAmountToCollect() : order.getTotalAmount();
+        payload.put("collectableAmount", isCod ? (codCollectAmount != null ? codCollectAmount : 0) : 0);
         payload.put("items", items);
         payload.put("customer", customerList);
 
-        // 5. Fulfillment setup
+        // 7. Fulfillment setup
         OrderFulfillment fulfillment = order.getFulfillment();
         if (fulfillment == null) {
             fulfillment = OrderFulfillment.builder()
@@ -199,7 +219,8 @@ public class EasyecomService {
         }
 
         try {
-            log.info("Pushing retail order {} to EasyEcom (/webhook/v2/createOrder)...", order.getReferenceCode());
+            String outgoingJson = objectMapper.writeValueAsString(payload);
+            log.info("Sending payload to EasyEcom for order {}: {}", order.getReferenceCode(), outgoingJson);
 
             String rawResponse = easyecomWebClient.post()
                     .uri("/webhook/v2/createOrder")
@@ -250,7 +271,6 @@ public class EasyecomService {
         fulfillmentRepository.save(fulfillment);
         return orderRepository.save(order);
     }
-
     /**
      * 3. Fetch Real-time Products Master from EasyEcom
      */
@@ -282,14 +302,9 @@ public class EasyecomService {
             throw new RuntimeException("EasyEcom Product Fetch Failed: " + ex.getMessage());
         }
     }
+
     /**
-     * EasyEcom se live current status fetch karein (Confirm, Failed ya Processing)
-     */
-    /**
-     * EasyEcom se live current status fetch karein (Correct endpoint: /Orders/GetOrderDetails)
-     */
-    /**
-     * EasyEcom Official V2 GetOrderDetails Endpoint
+     * 4. EasyEcom Official V2 GetOrderDetails Endpoint
      * GET /orders/V2/getOrderDetails?reference_code={orderNumber}
      */
     public Map<String, Object> checkLiveOrderStatus(String orderNumber) {
@@ -298,7 +313,6 @@ public class EasyecomService {
         try {
             log.info("Checking live order status from EasyEcom V2 for order: {}", orderNumber);
 
-            // Official Doc Endpoint: /orders/V2/getOrderDetails
             String responseStr = easyecomWebClient.get()
                     .uri(uriBuilder -> uriBuilder
                             .path("/orders/V2/getOrderDetails")
@@ -320,27 +334,22 @@ public class EasyecomService {
                 return Map.of("omsStatus", "IN_PROCESS");
             }
 
-            // EasyEcom returns array in data: data[0]
             JsonNode orderNode = root.path("data").get(0);
 
             String orderStatus = orderNode.path("order_status").asText("Open");
             int orderStatusId = orderNode.path("order_status_id").asInt(1);
             int fulfillableStatus = orderNode.path("fulfillable_status").asInt(1);
-            // EasyecomService.java -> checkLiveOrderStatus() method ke andar:
 
-// EasyEcom official response me AWB / Manual Tracking number extract karein
             String awbNumber = orderNode.path("awb_number").asText(
                     orderNode.path("tracking_number").asText(
                             orderNode.path("tracking_num").asText(null)
                     )
             );
 
-// Carrier name extract karein (agar empty ho toh carrier_name check karein)
             String courier = orderNode.path("courier").asText(
                     orderNode.path("carrier_name").asText(null)
             );
 
-// Tracking URL check karein, agar blank ho aur Delhivery courier ho toh direct link banayein
             String trackingUrl = orderNode.path("tracking_url").asText(null);
             if ((trackingUrl == null || trackingUrl.isBlank()) && awbNumber != null && !awbNumber.isBlank()) {
                 if ("Delhivery".equalsIgnoreCase(courier)) {
@@ -348,7 +357,6 @@ public class EasyecomService {
                 }
             }
 
-            // Label & Invoice PDF documents if generated
             JsonNode documents = orderNode.path("documents");
             String labelUrl = documents.path("label").asText(null);
             String invoiceUrl = documents.path("easyecom_invoice").asText(null);
@@ -363,26 +371,19 @@ public class EasyecomService {
             result.put("labelUrl", labelUrl);
             result.put("invoiceUrl", invoiceUrl);
 
-            // 1. Stock / Inventory Failure Check
             if (fulfillableStatus == 0 || "Failed".equalsIgnoreCase(orderStatus)) {
                 result.put("omsStatus", "STOCK_FAILED");
-            }
-            // 2. Dispatched / Shipped Check
-            else if ("Ready to dispatch".equalsIgnoreCase(orderStatus) ||
+            } else if ("Ready to dispatch".equalsIgnoreCase(orderStatus) ||
                     "Dispatched".equalsIgnoreCase(orderStatus) ||
                     "Shipped".equalsIgnoreCase(orderStatus) ||
                     (awbNumber != null && !awbNumber.isBlank())) {
                 result.put("omsStatus", "CONFIRMED_DISPATCHED");
-            }
-            // 3. Confirmed / Open in Warehouse
-            else if ("Confirmed".equalsIgnoreCase(orderStatus) ||
+            } else if ("Confirmed".equalsIgnoreCase(orderStatus) ||
                     "Open".equalsIgnoreCase(orderStatus) ||
                     "Assigned".equalsIgnoreCase(orderStatus) ||
                     "Printed".equalsIgnoreCase(orderStatus)) {
                 result.put("omsStatus", "CONFIRMED");
-            }
-            // 4. In queue / Pending
-            else {
+            } else {
                 result.put("omsStatus", "IN_PROCESS");
             }
 

@@ -41,8 +41,16 @@ public class Order {
     @Column(length = 150)
     private String email;
 
+    // Full address string for fallback and UI display
     @Column(nullable = false, columnDefinition = "TEXT")
     private String address;
+
+    // Address Breakdown for EasyEcom V2 Dispatch
+    @Column(name = "address_line_1", columnDefinition = "TEXT")
+    private String addressLine1;
+
+    @Column(name = "address_line_2", columnDefinition = "TEXT")
+    private String addressLine2;
 
     @Column(nullable = false, length = 100)
     private String city;
@@ -53,6 +61,60 @@ public class Order {
     @Column(nullable = false, length = 10)
     private String pincode;
 
+    @Column(name = "country", length = 50)
+    @Builder.Default
+    private String country = "India";
+
+    // --- Distinct Billing Address Fields ---
+    @Column(name = "billing_name", length = 150)
+    private String billingName;
+
+    @Column(name = "billing_phone", length = 20)
+    private String billingPhone;
+
+    @Column(name = "billing_address_line_1", columnDefinition = "TEXT")
+    private String billingAddressLine1;
+
+    @Column(name = "billing_address_line_2", columnDefinition = "TEXT")
+    private String billingAddressLine2;
+
+    @Column(name = "billing_city", length = 100)
+    private String billingCity;
+
+    @Column(name = "billing_state", length = 100)
+    private String billingState;
+
+    @Column(name = "billing_pincode", length = 10)
+    private String billingPincode;
+
+    // --- EasyEcom Package Dimensions & Weight ---
+    @Column(name = "package_weight")
+    @Builder.Default
+    private Integer packageWeight = 500; // in grams
+
+    @Column(name = "package_length")
+    @Builder.Default
+    private Integer packageLength = 10; // in cm
+
+    @Column(name = "package_width")
+    @Builder.Default
+    private Integer packageWidth = 10; // in cm
+
+    @Column(name = "package_height")
+    @Builder.Default
+    private Integer packageHeight = 10; // in cm
+
+    // --- Compliance & EasyEcom Remarks ---
+    @Column(name = "gst_number", length = 20)
+    private String gstNumber;
+
+    @Column(name = "remarks_1", length = 255)
+    private String remarks1;
+
+    @Column(name = "remarks_2", length = 255)
+    private String remarks2;
+
+    // --- Order Types & Statuses ---
     @Column(name = "order_type", nullable = false, length = 30)
     private String orderType; // PREPAID, COD, PARTIAL_COD
 
@@ -63,7 +125,7 @@ public class Order {
     @Column(nullable = false, length = 50)
     @Builder.Default
     private String status = "PENDING_APPROVAL";
-    // PENDING_APPROVAL, APPROVED, SYNCED_TO_EASYECOM, SYNC_FAILED, REJECTED
+    // PENDING_APPROVAL, APPROVED, SYNCED_TO_EASYECOM, STOCK_FAILED, SYNC_FAILED, REJECTED, CONFIRMED
 
     @Column(name = "total_amount", nullable = false, precision = 12, scale = 2)
     private BigDecimal totalAmount;
@@ -81,6 +143,7 @@ public class Order {
 
     // --- Other Charges ---
     @Column(name = "other_charges")
+    @Builder.Default
     private BigDecimal otherCharges = BigDecimal.ZERO;
 
     @Column(name = "other_charges_desc")
@@ -88,9 +151,11 @@ public class Order {
 
     // --- Discount ---
     @Column(name = "discount_percentage")
+    @Builder.Default
     private BigDecimal discountPercentage = BigDecimal.ZERO;
 
     @Column(name = "discount_amount")
+    @Builder.Default
     private BigDecimal discountAmount = BigDecimal.ZERO;
 
     // --- Payment & Notes ---
@@ -104,9 +169,11 @@ public class Order {
     private String notes;
 
     @Column(name = "is_free_product")
+    @Builder.Default
     private Boolean isFreeProduct = false;
 
     @Column(name = "line_total")
+    @Builder.Default
     private BigDecimal lineTotal = BigDecimal.ZERO;
 
     @Column(name = "created_at", updatable = false)
@@ -121,6 +188,20 @@ public class Order {
         this.updatedAt = LocalDateTime.now();
         if (this.status == null) {
             this.status = "PENDING_APPROVAL";
+        }
+        // Auto-populate addressLine1 if only address was supplied
+        if (this.addressLine1 == null || this.addressLine1.isBlank()) {
+            this.addressLine1 = this.address;
+        }
+        // Fallback: If billing fields are empty, sync from shipping
+        if (this.billingName == null || this.billingName.isBlank()) {
+            this.billingName = this.customerName;
+            this.billingPhone = this.phone;
+            this.billingAddressLine1 = this.addressLine1;
+            this.billingAddressLine2 = this.addressLine2;
+            this.billingCity = this.city;
+            this.billingState = this.state;
+            this.billingPincode = this.pincode;
         }
     }
 
