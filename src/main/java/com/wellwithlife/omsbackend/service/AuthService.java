@@ -8,6 +8,8 @@ import com.wellwithlife.omsbackend.entity.User;
 import com.wellwithlife.omsbackend.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.authentication.BadCredentialsException;
+import org.springframework.security.authentication.DisabledException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -29,11 +31,16 @@ public class AuthService {
             throw new IllegalArgumentException("Email already registered: " + request.getEmail());
         }
 
+        String assignedRole = (request.getRole() != null && !request.getRole().isBlank())
+                ? request.getRole().toUpperCase()
+                : "BDE";
+
         User user = User.builder()
                 .name(request.getName())
                 .email(request.getEmail())
+//                .phone(request.getPhone()) // Phone mapping included
                 .password(passwordEncoder.encode(request.getPassword()))
-                .role(request.getRole().toUpperCase())
+                .role(assignedRole)
                 .isActive(true)
                 .build();
 
@@ -57,17 +64,27 @@ public class AuthService {
     }
 
     public AuthResponse authenticate(AuthRequest request) {
+        // 1. User existence & active check
+        User user = userRepository.findByEmail(request.getEmail())
+                .orElseThrow(() -> new BadCredentialsException("Invalid email or password"));
+
+        // Safe boolean check (null ko safe default true maanein)
+        boolean isEnabled = user.getIsActive() == null || Boolean.TRUE.equals(user.getIsActive());
+
+        if (!isEnabled) {
+            throw new DisabledException("Your account is deactivated. Please contact administrator.");
+        }
+
+        // 2. Credentials verification
         authenticationManager.authenticate(
                 new UsernamePasswordAuthenticationToken(request.getEmail(), request.getPassword())
         );
 
-        User user = userRepository.findByEmail(request.getEmail())
-                .orElseThrow(() -> new IllegalArgumentException("User not found"));
-
+        // 3. UserDetails mapping with primitive boolean
         var userDetails = new org.springframework.security.core.userdetails.User(
                 user.getEmail(),
                 user.getPassword(),
-                user.getIsActive(),
+                isEnabled,
                 true, true, true,
                 Collections.singletonList(new SimpleGrantedAuthority("ROLE_" + user.getRole()))
         );
