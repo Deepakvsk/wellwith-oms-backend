@@ -55,6 +55,9 @@ public class UserService {
                 .password(passwordEncoder.encode(request.getPassword()))
                 .role(assignedRole)
                 .isActive(true)
+                .refPrefix(request.getRefPrefix() != null && !request.getRefPrefix().isBlank()
+                        ? request.getRefPrefix().trim().toUpperCase()
+                        : null)
                 .build();
 
         return mapToResponse(userRepository.save(user));
@@ -77,6 +80,11 @@ public class UserService {
         }
         if (request.getPassword() != null && !request.getPassword().isBlank()) {
             user.setPassword(passwordEncoder.encode(request.getPassword()));
+        }
+
+        if (request.getRefPrefix() != null) {
+            String prefix = request.getRefPrefix().trim().toUpperCase();
+            user.setRefPrefix(prefix.isEmpty() ? null : prefix);
         }
 
         return mapToResponse(userRepository.save(user));
@@ -106,6 +114,7 @@ public class UserService {
                 .name(user.getName())
                 .email(user.getEmail())
                 .role(user.getRole())
+                .refPrefix(user.getRefPrefix())
                 .isActive(user.getIsActive() == null || Boolean.TRUE.equals(user.getIsActive()))
                 .createdAt(user.getCreatedAt())
                 .build();

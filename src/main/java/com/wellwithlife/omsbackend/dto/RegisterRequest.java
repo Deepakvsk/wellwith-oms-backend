@@ -16,6 +16,8 @@ public class RegisterRequest {
     @NotBlank(message = "Password is required")
     private String password;
 
+    private String refPrefix;
+
     @NotBlank(message = "Role is required (SUPERADMIN, ADMIN, BDE)")
     private String role;
 }

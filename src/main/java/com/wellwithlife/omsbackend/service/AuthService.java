@@ -60,6 +60,7 @@ public class AuthService {
                 .name(savedUser.getName())
                 .email(savedUser.getEmail())
                 .role(savedUser.getRole())
+                .refPrefix(user.getRefPrefix())
                 .build();
     }
 
@@ -97,6 +98,7 @@ public class AuthService {
                 .name(user.getName())
                 .email(user.getEmail())
                 .role(user.getRole())
+                .refPrefix(user.getRefPrefix())
                 .build();
     }
 }

@@ -30,6 +30,9 @@ public class User {
     @Column(nullable = false)
     private String password;
 
+    @Column(name = "ref_prefix", length = 50)
+    private String refPrefix;
+
     @Column(nullable = false, length = 30)
     private String role; // SUPERADMIN, ADMIN, BDE
 
