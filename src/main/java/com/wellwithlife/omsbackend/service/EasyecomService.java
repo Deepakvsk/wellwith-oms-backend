@@ -169,10 +169,17 @@ public class EasyecomService {
         List customerList = new ArrayList<>();
         customerList.add(customerObject);
 
-        // 5. Payment Mode Sanitization
-        String rawPaymentType = order.getPaymentType() != null ? order.getPaymentType().trim().toUpperCase() : "COD";
-        boolean isCod = "COD".equals(rawPaymentType) || "CASH ON DELIVERY".equals(rawPaymentType) || "CASH".equals(rawPaymentType);
-        int paymentModeId = isCod ? 2 : 1; // 2 = COD, 1 = Prepaid/Online in standard EasyEcom API
+        // 5. Payment Mode Sanitization (OrderType aur PaymentType dono check karein)
+        String rawPaymentType = order.getPaymentType() != null ? order.getPaymentType().trim().toUpperCase() : "";
+        String rawOrderType = order.getOrderType() != null ? order.getOrderType().trim().toUpperCase() : "";
+
+        // Agar OrderType COD/PARTIAL_COD hai YA PaymentType COD hai, toh use EasyEcom COD (mode 2) consider karega
+        boolean isCod = "COD".equals(rawOrderType)
+                || "PARTIAL_COD".equals(rawOrderType)
+                || "COD".equals(rawPaymentType)
+                || "CASH ON DELIVERY".equals(rawPaymentType);
+
+        int paymentModeId = isCod ? 2 : 1; // 2 = COD, 1 = Prepaid
 
         // 6. EasyEcom Retail Order Payload Construction
         Map<String, Object> payload = new LinkedHashMap<>();
@@ -190,10 +197,12 @@ public class EasyecomService {
         payload.put("prepaidDiscount", 0);
         payload.put("paymentMode", paymentModeId);
 
-        // Gateway details are omitted completely for COD to satisfy EasyEcom validation
+        // 👇 PURE PREPAID ORDERS KE LIYE HI GATEWAY JAYEGA
         if (!isCod) {
             payload.put("paymentGateway", "Online");
-            payload.put("paymentTransactionNumber", "TXN-" + System.currentTimeMillis());
+            payload.put("paymentTransactionNumber", order.getPaymentTransactionNumber() != null
+                    ? order.getPaymentTransactionNumber()
+                    : "TXN-" + System.currentTimeMillis());
         }
 
         payload.put("shippingMethod", 1);
@@ -203,6 +212,7 @@ public class EasyecomService {
         payload.put("packageWidth", order.getPackageWidth() != null ? order.getPackageWidth() : 10);
         payload.put("packageLength", order.getPackageLength() != null ? order.getPackageLength() : 10);
 
+        // COD collectable amount check
         Object codCollectAmount = order.getAmountToCollect() != null ? order.getAmountToCollect() : order.getTotalAmount();
         payload.put("collectableAmount", isCod ? (codCollectAmount != null ? codCollectAmount : 0) : 0);
         payload.put("items", items);

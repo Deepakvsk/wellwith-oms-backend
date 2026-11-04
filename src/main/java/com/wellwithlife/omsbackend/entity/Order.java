@@ -162,6 +162,9 @@ public class Order {
     @Column(name = "payment_type")
     private String paymentType; // COD, PREPAID, PARTIAL_COD
 
+    private String paymentGateway;
+    private String paymentTransactionNumber;
+
     @Column(name = "payment_screenshot_url")
     private String paymentScreenshotUrl;
 
