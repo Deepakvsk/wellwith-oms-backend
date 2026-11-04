@@ -7,6 +7,7 @@ import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.lang.NonNull;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UserDetailsService;
@@ -15,6 +16,8 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
+import java.util.HashSet;
+import java.util.Set;
 
 @Component
 @RequiredArgsConstructor
@@ -54,10 +57,26 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 UserDetails userDetails = this.userDetailsService.loadUserByUsername(userEmail);
 
                 if (jwtService.isTokenValid(jwt, userDetails)) {
+                    // Authority normalization: Plain name aur ROLE_ prefix dono add honge
+                    Set<SimpleGrantedAuthority> normalizedAuthorities = new HashSet<>();
+                    if (userDetails.getAuthorities() != null) {
+                        for (var authority : userDetails.getAuthorities()) {
+                            String authStr = authority.getAuthority();
+                            if (authStr != null && !authStr.isBlank()) {
+                                normalizedAuthorities.add(new SimpleGrantedAuthority(authStr));
+                                if (!authStr.startsWith("ROLE_")) {
+                                    normalizedAuthorities.add(new SimpleGrantedAuthority("ROLE_" + authStr));
+                                } else {
+                                    normalizedAuthorities.add(new SimpleGrantedAuthority(authStr.substring(5)));
+                                }
+                            }
+                        }
+                    }
+
                     UsernamePasswordAuthenticationToken authToken = new UsernamePasswordAuthenticationToken(
                             userDetails,
                             null,
-                            userDetails.getAuthorities()
+                            normalizedAuthorities
                     );
                     authToken.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
                     SecurityContextHolder.getContext().setAuthentication(authToken);
