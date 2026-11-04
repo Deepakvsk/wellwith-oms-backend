@@ -32,14 +32,18 @@ public class SecurityConfig {
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
                 .csrf(AbstractHttpConfigurer::disable)
-                .cors(cors -> cors.configurationSource(corsConfigurationSource())) //  Proper CORS
+                .cors(cors -> cors.configurationSource(corsConfigurationSource()))
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(new AntPathRequestMatcher("/api/auth/**")).permitAll()
                         .requestMatchers(new AntPathRequestMatcher("/api/health")).permitAll()
                         .requestMatchers(new AntPathRequestMatcher("/error")).permitAll()
                         .requestMatchers("/api/webhooks/easyecom/**").permitAll()
-                        .requestMatchers("/api/users/**").hasAnyRole("SUPERADMIN", "ADMIN")
+
+                        // 👇 hasAnyAuthority dono variations ko cleanly allow karega
+                        .requestMatchers("/api/users/**").hasAnyAuthority("SUPERADMIN", "ROLE_SUPERADMIN", "ADMIN", "ROLE_ADMIN")
+                        .requestMatchers("/api/orders/**").hasAnyAuthority("SUPERADMIN", "ROLE_SUPERADMIN", "ADMIN", "ROLE_ADMIN", "BDE", "ROLE_BDE")
+
                         .anyRequest().authenticated()
                 )
                 .authenticationProvider(authenticationProvider)
@@ -51,9 +55,16 @@ public class SecurityConfig {
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
-        configuration.setAllowedOrigins(List.of("http://localhost:5173", "http://localhost:3000","https://wellwithoms.netlify.app/"));
+
+        // 👇 Trailing slash hata diya hai aur exact origin match kiya hai:
+        configuration.setAllowedOrigins(List.of(
+                "http://localhost:5173",
+                "http://localhost:3000",
+                "https://wellwithoms.netlify.app"
+        ));
+
         configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"));
-        configuration.setAllowedHeaders(Arrays.asList("Authorization", "Content-Type", "Accept", "X-Requested-With"));
+        configuration.setAllowedHeaders(Arrays.asList("Authorization", "Content-Type", "Accept", "X-Requested-With", "Origin"));
         configuration.setExposedHeaders(List.of("Authorization"));
         configuration.setAllowCredentials(true);
 
