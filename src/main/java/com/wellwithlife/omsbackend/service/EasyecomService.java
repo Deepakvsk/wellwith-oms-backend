@@ -169,17 +169,15 @@ public class EasyecomService {
         List customerList = new ArrayList<>();
         customerList.add(customerObject);
 
-        // 5. Payment Mode Sanitization (OrderType aur PaymentType dono check karein)
+        // 5. Payment Mode Sanitization (Clean & Safe)
         String rawPaymentType = order.getPaymentType() != null ? order.getPaymentType().trim().toUpperCase() : "";
         String rawOrderType = order.getOrderType() != null ? order.getOrderType().trim().toUpperCase() : "";
 
-        // Agar OrderType COD/PARTIAL_COD hai YA PaymentType COD hai, toh use EasyEcom COD (mode 2) consider karega
-        boolean isCod = "COD".equals(rawOrderType)
-                || "PARTIAL_COD".equals(rawOrderType)
-                || "COD".equals(rawPaymentType)
-                || "CASH ON DELIVERY".equals(rawPaymentType);
+        // Pure prepaid tabhi hoga jab orderType strictly PREPAID ho aur paymentType COD na ho
+        boolean isPrepaid = "PREPAID".equals(rawOrderType) && !"COD".equals(rawPaymentType);
+        boolean isCod = !isPrepaid; // 👈 Variable name 'isCod' hi rakha hai taaki symbol error na aaye
 
-        int paymentModeId = isCod ? 2 : 1; // 2 = COD, 1 = Prepaid
+        int paymentModeId = isCod ? 2 : 1; // 2 = COD / Collectable, 1 = Prepaid
 
         // 6. EasyEcom Retail Order Payload Construction
         Map<String, Object> payload = new LinkedHashMap<>();
@@ -197,7 +195,7 @@ public class EasyecomService {
         payload.put("prepaidDiscount", 0);
         payload.put("paymentMode", paymentModeId);
 
-        // 👇 PURE PREPAID ORDERS KE LIYE HI GATEWAY JAYEGA
+        // Sirf pure PREPAID orders ke liye hi paymentGateway key add hogi
         if (!isCod) {
             payload.put("paymentGateway", "Online");
             payload.put("paymentTransactionNumber", order.getPaymentTransactionNumber() != null
@@ -212,8 +210,21 @@ public class EasyecomService {
         payload.put("packageWidth", order.getPackageWidth() != null ? order.getPackageWidth() : 10);
         payload.put("packageLength", order.getPackageLength() != null ? order.getPackageLength() : 10);
 
-        // COD collectable amount check
+        // Collectable amount handling
         Object codCollectAmount = order.getAmountToCollect() != null ? order.getAmountToCollect() : order.getTotalAmount();
+        payload.put("collectableAmount", isCod ? (codCollectAmount != null ? codCollectAmount : 0) : 0);
+        payload.put("items", items);
+        payload.put("customer", customerList);
+
+        payload.put("shippingMethod", 1);
+        payload.put("is_market_shipped", 0);
+        payload.put("packageWeight", order.getPackageWeight() != null ? order.getPackageWeight() : 100);
+        payload.put("packageHeight", order.getPackageHeight() != null ? order.getPackageHeight() : 10);
+        payload.put("packageWidth", order.getPackageWidth() != null ? order.getPackageWidth() : 10);
+        payload.put("packageLength", order.getPackageLength() != null ? order.getPackageLength() : 10);
+
+        // COD collectable amount check
+         codCollectAmount = order.getAmountToCollect() != null ? order.getAmountToCollect() : order.getTotalAmount();
         payload.put("collectableAmount", isCod ? (codCollectAmount != null ? codCollectAmount : 0) : 0);
         payload.put("items", items);
         payload.put("customer", customerList);
