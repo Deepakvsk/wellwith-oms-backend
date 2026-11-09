@@ -204,6 +204,7 @@ public class OrderService {
                 .deliveryLink(order.getFulfillment() != null ? order.getFulfillment().getDeliveryLink() : null)
                 .deliveryStatus(order.getFulfillment() != null ? order.getFulfillment().getDeliveryStatus() : "PENDING")
                 .syncErrorPayload(order.getFulfillment() != null ? order.getFulfillment().getSyncErrorPayload() : null)
+                .rejectionReason(order.getRejectionReason())
                 .createdAt(order.getCreatedAt())
                 .updatedAt(order.getUpdatedAt())
 
@@ -274,6 +275,7 @@ public class OrderService {
                 .orElseThrow(() -> new IllegalArgumentException("Order not found with ID: " + orderId));
 
         order.setStatus("REJECTED");
+        order.setRejectionReason(reason != null && !reason.isBlank() ? reason.trim() : "Rejected by Admin");
         return mapToOrderResponse(orderRepository.save(order));
     }
 

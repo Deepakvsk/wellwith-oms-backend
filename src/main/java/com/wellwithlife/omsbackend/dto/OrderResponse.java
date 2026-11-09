@@ -63,6 +63,7 @@ public class OrderResponse {
     private String deliveryLink;
     private String deliveryStatus;
     private String syncErrorPayload;
+    private String rejectionReason;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 

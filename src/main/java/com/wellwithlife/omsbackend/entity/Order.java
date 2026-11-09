@@ -127,6 +127,9 @@ public class Order {
     private String status = "PENDING_APPROVAL";
     // PENDING_APPROVAL, APPROVED, SYNCED_TO_EASYECOM, STOCK_FAILED, SYNC_FAILED, REJECTED, CONFIRMED
 
+    @Column(name = "rejection_reason", columnDefinition = "TEXT")
+    private String rejectionReason;
+
     @Column(name = "total_amount", nullable = false, precision = 12, scale = 2)
     private BigDecimal totalAmount;
 
