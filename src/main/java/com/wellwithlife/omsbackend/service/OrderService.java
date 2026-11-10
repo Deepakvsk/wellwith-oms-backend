@@ -182,6 +182,8 @@ public class OrderService {
                 // --- Order Type, Payment & Status ---
                 .orderType(order.getOrderType())
                 .paymentType(order.getPaymentType())
+                .paymentTransactionNumber(order.getPaymentTransactionNumber())
+                .paymentScreenshotUrl(order.getPaymentScreenshotUrl())
                 .status(order.getStatus())
                 .notes(order.getNotes())
                 .gstNumber(order.getGstNumber())

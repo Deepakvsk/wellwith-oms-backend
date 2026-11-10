@@ -41,6 +41,8 @@ public class OrderResponse {
     // --- Order & Payment Types ---
     private String orderType;        // PREPAID, COD
     private String paymentType;      // COD, UPI, NETBANKING
+    private String paymentTransactionNumber;
+    private String paymentScreenshotUrl;
     private String notes;
     private String status;
     private String gstNumber;
