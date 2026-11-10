@@ -17,6 +17,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.reactive.function.client.WebClient;
 import org.springframework.web.reactive.function.client.WebClientResponseException;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
@@ -169,15 +170,28 @@ public class EasyecomService {
         List customerList = new ArrayList<>();
         customerList.add(customerObject);
 
-        // 5. Payment Mode Sanitization (Clean & Safe)
+        // 5. Payment Mode & Partial COD Sanitization
         String rawPaymentType = order.getPaymentType() != null ? order.getPaymentType().trim().toUpperCase() : "";
         String rawOrderType = order.getOrderType() != null ? order.getOrderType().trim().toUpperCase() : "";
 
-        // Pure prepaid tabhi hoga jab orderType strictly PREPAID ho aur paymentType COD na ho
-        boolean isPrepaid = "PREPAID".equals(rawOrderType) && !"COD".equals(rawPaymentType);
-        boolean isCod = !isPrepaid; // 👈 Variable name 'isCod' hi rakha hai taaki symbol error na aaye
+        // Strictly PREPAID: orderType must be PREPAID and paymentType must not be COD
+        boolean isStrictlyPrepaid = "PREPAID".equals(rawOrderType) && !"COD".equals(rawPaymentType);
 
-        int paymentModeId = isCod ? 2 : 1; // 2 = COD / Collectable, 1 = Prepaid
+        // EasyEcom Mapping: 1 = Prepaid, 2 = COD / Collectable
+        int easyecomPaymentMode = isStrictlyPrepaid ? 1 : 2;
+
+        BigDecimal totalOrderVal = order.getTotalAmount() != null ? order.getTotalAmount() : BigDecimal.ZERO;
+        BigDecimal collectableVal;
+
+        if (isStrictlyPrepaid) {
+            collectableVal = BigDecimal.ZERO;
+        } else if ("PARTIAL_COD".equals(rawOrderType)) {
+            collectableVal = (order.getAmountToCollect() != null && order.getAmountToCollect().compareTo(BigDecimal.ZERO) > 0)
+                    ? order.getAmountToCollect()
+                    : totalOrderVal;
+        } else {
+            collectableVal = totalOrderVal;
+        }
 
         // 6. EasyEcom Retail Order Payload Construction
         Map<String, Object> payload = new LinkedHashMap<>();
@@ -186,19 +200,32 @@ public class EasyecomService {
         payload.put("orderNumber", order.getReferenceCode());
         payload.put("orderDate", orderDate);
         payload.put("expDeliveryDate", expDeliveryDate);
-        payload.put("remarks1", order.getRemarks1() != null ? order.getRemarks1() : (order.getNotes() != null ? order.getNotes() : ""));
+
+        // Warehouse invoice remark formatting
+        String internalRemark;
+        if ("PARTIAL_COD".equals(rawOrderType)) {
+            BigDecimal advanceRecd = totalOrderVal.subtract(collectableVal);
+            String txn = (order.getPaymentTransactionNumber() != null && !order.getPaymentTransactionNumber().isBlank())
+                    ? order.getPaymentTransactionNumber()
+                    : "N/A";
+            internalRemark = String.format("PARTIAL COD: Advance ₹%.2f Recd (Txn: %s). Collect ₹%.2f Cash.", advanceRecd, txn, collectableVal);
+        } else {
+            internalRemark = order.getRemarks1() != null ? order.getRemarks1() : (order.getNotes() != null ? order.getNotes() : "");
+        }
+
+        payload.put("remarks1", internalRemark);
         payload.put("remarks2", order.getRemarks2() != null ? order.getRemarks2() : "");
         payload.put("shippingCost", order.getOtherCharges() != null ? order.getOtherCharges() : 0);
         payload.put("discount", order.getDiscountAmount() != null ? order.getDiscountAmount() : 0);
         payload.put("walletDiscount", 0);
         payload.put("promoCodeDiscount", 0);
         payload.put("prepaidDiscount", 0);
-        payload.put("paymentMode", paymentModeId);
+        payload.put("paymentMode", easyecomPaymentMode);
 
-        // Sirf pure PREPAID orders ke liye hi paymentGateway key add hogi
-        if (!isCod) {
+        // paymentGateway field is strictly added only for pure prepaid orders
+        if (isStrictlyPrepaid) {
             payload.put("paymentGateway", "Online");
-            payload.put("paymentTransactionNumber", order.getPaymentTransactionNumber() != null
+            payload.put("paymentTransactionNumber", (order.getPaymentTransactionNumber() != null && !order.getPaymentTransactionNumber().isBlank())
                     ? order.getPaymentTransactionNumber()
                     : "TXN-" + System.currentTimeMillis());
         }
@@ -209,23 +236,7 @@ public class EasyecomService {
         payload.put("packageHeight", order.getPackageHeight() != null ? order.getPackageHeight() : 10);
         payload.put("packageWidth", order.getPackageWidth() != null ? order.getPackageWidth() : 10);
         payload.put("packageLength", order.getPackageLength() != null ? order.getPackageLength() : 10);
-
-        // Collectable amount handling
-        Object codCollectAmount = order.getAmountToCollect() != null ? order.getAmountToCollect() : order.getTotalAmount();
-        payload.put("collectableAmount", isCod ? (codCollectAmount != null ? codCollectAmount : 0) : 0);
-        payload.put("items", items);
-        payload.put("customer", customerList);
-
-        payload.put("shippingMethod", 1);
-        payload.put("is_market_shipped", 0);
-        payload.put("packageWeight", order.getPackageWeight() != null ? order.getPackageWeight() : 100);
-        payload.put("packageHeight", order.getPackageHeight() != null ? order.getPackageHeight() : 10);
-        payload.put("packageWidth", order.getPackageWidth() != null ? order.getPackageWidth() : 10);
-        payload.put("packageLength", order.getPackageLength() != null ? order.getPackageLength() : 10);
-
-        // COD collectable amount check
-         codCollectAmount = order.getAmountToCollect() != null ? order.getAmountToCollect() : order.getTotalAmount();
-        payload.put("collectableAmount", isCod ? (codCollectAmount != null ? codCollectAmount : 0) : 0);
+        payload.put("collectableAmount", collectableVal);
         payload.put("items", items);
         payload.put("customer", customerList);
 
@@ -291,8 +302,7 @@ public class EasyecomService {
 
         fulfillmentRepository.save(fulfillment);
         return orderRepository.save(order);
-    }
-    /**
+    }    /**
      * 3. Fetch Real-time Products Master from EasyEcom
      */
     public JsonNode fetchProductMaster() {
