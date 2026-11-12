@@ -53,4 +53,34 @@ public interface OrderRepository extends JpaRepository<Order, Long> {
 
     @Query("SELECT o FROM Order o LEFT JOIN o.fulfillment f WHERE o.status IN ('SYNCED_TO_EASYECOM', 'CONFIRMED') AND (f.awbNumber IS NULL OR f.awbNumber = '')")
     List<Order> findOrdersPendingEasyecomSync();
+
+//
+////   ============= GLOBAL SERACH ==============
+//// 1. Global Search for ADMIN / SUPERADMIN
+//@Query("SELECT DISTINCT o FROM Order o LEFT JOIN o.fulfillment f " +
+//        "WHERE LOWER(o.referenceCode) LIKE LOWER(CONCAT('%', :q, '%')) " +
+//        "OR LOWER(o.customerName) LIKE LOWER(CONCAT('%', :q, '%')) " +
+//        "OR o.phone LIKE CONCAT('%', :q, '%') " +
+//        "OR LOWER(o.email) LIKE LOWER(CONCAT('%', :q, '%')) " +
+//        "OR LOWER(o.city) LIKE LOWER(CONCAT('%', :q, '%')) " +
+//        "OR LOWER(f.awbNumber) LIKE LOWER(CONCAT('%', :q, '%')) " +
+//        "ORDER BY o.createdAt DESC")
+//List<Order> searchGlobalOrders(@Param("q") String query);
+//
+//    // 2. Scoped Search for BDE (Strictly restricted to their own createdBy ID)
+//    @Query("SELECT DISTINCT o FROM Order o LEFT JOIN o.fulfillment f " +
+//            "WHERE o.createdBy.userId = :bdeId AND (" +
+//            "LOWER(o.referenceCode) LIKE LOWER(CONCAT('%', :q, '%')) " +
+//            "OR LOWER(o.customerName) LIKE LOWER(CONCAT('%', :q, '%')) " +
+//            "OR o.phone LIKE CONCAT('%', :q, '%') " +
+//            "OR LOWER(o.email) LIKE LOWER(CONCAT('%', :q, '%')) " +
+//            "OR LOWER(o.city) LIKE LOWER(CONCAT('%', :q, '%')) " +
+//            "OR LOWER(f.awbNumber) LIKE LOWER(CONCAT('%', :q, '%'))" +
+//            ") ORDER BY o.createdAt DESC")
+//    List<Order> searchBdeOrders(@Param("bdeId") Long bdeId, @Param("q") String query);
+//
+//
+//    //   ============= END GLOBAL SERACH ==============
+
+
 }
