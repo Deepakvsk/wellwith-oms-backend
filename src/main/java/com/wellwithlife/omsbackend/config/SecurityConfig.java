@@ -41,8 +41,8 @@ public class SecurityConfig {
                         .requestMatchers("/api/webhooks/easyecom/**").permitAll()
 
                         // 👇 hasAnyAuthority dono variations ko cleanly allow karega
-                        .requestMatchers("/api/users/**").hasAnyAuthority("SUPERADMIN", "ROLE_SUPERADMIN", "ADMIN", "ROLE_ADMIN")
-                        .requestMatchers("/api/orders/**").hasAnyAuthority("SUPERADMIN", "ROLE_SUPERADMIN", "ADMIN", "ROLE_ADMIN", "BDE", "ROLE_BDE")
+                        .requestMatchers("/api/users/**").hasAnyAuthority("SUPERADMIN", "ROLE_SUPERADMIN", "ADMIN", "ROLE_ADMIN","TEAM_LEADER")
+                        .requestMatchers("/api/orders/**").hasAnyAuthority("SUPERADMIN", "ROLE_SUPERADMIN", "ADMIN", "ROLE_ADMIN", "BDE", "ROLE_BDE", "TEAM_LEADER")
 
                         .anyRequest().authenticated()
                 )

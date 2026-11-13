@@ -18,6 +18,8 @@ public class UserResponse {
     private String phone;
     private String role;
     private String refPrefix;
+    private Long teamLeadId;
+    private String teamLeadName;
     private Boolean isActive;
     private LocalDateTime createdAt;
 }

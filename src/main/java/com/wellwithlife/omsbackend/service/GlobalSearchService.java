@@ -43,22 +43,34 @@ public class GlobalSearchService {
         User currentUser = resolveUser(authentication);
         String role = (currentUser != null && currentUser.getRole() != null)
                 ? currentUser.getRole().toUpperCase()
-                : "ADMIN";
+                : "BDE";
 
-        boolean isAdmin = role.contains("SUPERADMIN") || role.contains("ADMIN") || role.contains("TEAM_LEADER");
+        boolean isAdmin = role.contains("SUPERADMIN") || role.contains("ADMIN");
+        boolean isTeamLead = role.contains("TEAM_LEADER");
 
-        // 2. Fetch orders safely without fragile custom JPQL joins
+        // 2. Role-Based Data Scoping (GLOBAL vs TEAM vs PERSONAL)
         List<Order> allAccessibleOrders;
         if (isAdmin || currentUser == null) {
             allAccessibleOrders = orderRepository.findAll();
+        } else if (isTeamLead) {
+            Long tlId = currentUser.getUserId();
+            Set<Long> teamUserIds = userRepository.findAll().stream()
+                    .filter(u -> Objects.equals(u.getUserId(), tlId) ||
+                            (u.getTeamLead() != null && Objects.equals(u.getTeamLead().getUserId(), tlId)))
+                    .map(User::getUserId)
+                    .collect(Collectors.toSet());
+
+            allAccessibleOrders = orderRepository.findAll().stream()
+                    .filter(o -> o.getCreatedBy() != null && teamUserIds.contains(o.getCreatedBy().getUserId()))
+                    .collect(Collectors.toList());
         } else {
-            Long currentUserId = currentUser.getUserId(); // Change to getId() if User PK is 'id'
+            Long currentUserId = currentUser.getUserId();
             allAccessibleOrders = orderRepository.findAll().stream()
                     .filter(o -> o.getCreatedBy() != null && Objects.equals(o.getCreatedBy().getUserId(), currentUserId))
                     .collect(Collectors.toList());
         }
 
-        // 3. Filter matching orders (Ref Code, Customer Name, Phone, Email, City, AWB)
+        // 3. Filter matching orders & sort newest first
         List<Order> matchedOrders = allAccessibleOrders.stream()
                 .filter(o -> matchesQuery(o, query))
                 .sorted(Comparator.comparing(Order::getCreatedAt, Comparator.nullsLast(Comparator.reverseOrder())))
@@ -119,9 +131,11 @@ public class GlobalSearchService {
                 .map(orderService::mapToOrderResponse)
                 .collect(Collectors.toList());
 
+        String resolvedScope = isAdmin ? "GLOBAL" : (isTeamLead ? "TEAM" : "PERSONAL");
+
         return GlobalSearchResponse.builder()
                 .query(rawQuery)
-                .scope(isAdmin ? "GLOBAL" : "PERSONAL")
+                .scope(resolvedScope)
                 .totalOrdersFound(orderDtos.size())
                 .totalRevenue(totalRev)
                 .customers(customerProfiles)

@@ -15,6 +15,7 @@ public class UserUpdateRequest {
     private String phone;
     private String refPrefix;
     private String role; // "SUPERADMIN", "ADMIN", "TEAM_LEADER", "BDE"
+    private Long teamLeadId;
     private Boolean isActive;
     private String password; // Optional: Sirf jab password update karna ho
 }

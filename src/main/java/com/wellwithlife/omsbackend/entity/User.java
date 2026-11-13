@@ -42,6 +42,11 @@ public class User implements UserDetails {
     @Column(nullable = false, length = 30)
     private String role; // SUPERADMIN, ADMIN, BDE
 
+    // Self-Referencing Team Lead Hierarchy
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "team_lead_id")
+    private User teamLead;
+
     @Column(name = "is_active", nullable = false)
     @Builder.Default
     private Boolean isActive = true;

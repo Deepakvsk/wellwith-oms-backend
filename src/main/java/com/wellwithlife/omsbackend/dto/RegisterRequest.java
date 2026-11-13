@@ -20,4 +20,6 @@ public class RegisterRequest {
 
     @NotBlank(message = "Role is required (SUPERADMIN, ADMIN, BDE)")
     private String role;
+
+    private Long teamLeadId;
 }

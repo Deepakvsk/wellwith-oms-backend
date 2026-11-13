@@ -14,8 +14,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
-import java.util.Collections;
-import java.util.List;
+import java.util.*;
 import java.util.stream.Collectors;
 
 @Service
@@ -279,6 +278,23 @@ public class OrderService {
         order.setStatus("REJECTED");
         order.setRejectionReason(reason != null && !reason.isBlank() ? reason.trim() : "Rejected by Admin");
         return mapToOrderResponse(orderRepository.save(order));
+    }
+
+
+    @Transactional(readOnly = true)
+    public List<OrderResponse> getOrdersForTeamLead(Long teamLeadId) {
+        List<User> allUsers = userRepository.findAll();
+        Set<Long> allowedUserIds = allUsers.stream()
+                .filter(u -> Objects.equals(u.getUserId(), teamLeadId) ||
+                        (u.getTeamLead() != null && Objects.equals(u.getTeamLead().getUserId(), teamLeadId)))
+                .map(User::getUserId)
+                .collect(Collectors.toSet());
+
+        return orderRepository.findAll().stream()
+                .filter(o -> o.getCreatedBy() != null && allowedUserIds.contains(o.getCreatedBy().getUserId()))
+                .sorted(Comparator.comparing(Order::getCreatedAt, Comparator.nullsLast(Comparator.reverseOrder())))
+                .map(this::mapToOrderResponse)
+                .collect(Collectors.toList());
     }
 
 }

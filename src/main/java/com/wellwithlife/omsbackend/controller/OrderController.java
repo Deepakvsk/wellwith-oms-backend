@@ -57,7 +57,26 @@ public class OrderController {
         User currentUser = userRepository.findByEmail(email)
                 .orElseThrow(() -> new IllegalArgumentException("User not found: " + email));
 
+        if ("TEAM_LEADER".equalsIgnoreCase(currentUser.getRole())) {
+            return ResponseEntity.ok(orderService.getOrdersForTeamLead(currentUser.getUserId()));
+        }
         return ResponseEntity.ok(orderService.getOrdersByBde(currentUser.getUserId()));
+    }
+
+    @GetMapping("/team-orders")
+    @PreAuthorize("hasAnyRole('TEAM_LEADER', 'ADMIN', 'SUPERADMIN')")
+    public ResponseEntity<List<OrderResponse>> getTeamOrders(Authentication authentication) {
+        String email = authentication.getName();
+        User currentUser = userRepository.findByEmail(email)
+                .orElseThrow(() -> new IllegalArgumentException("User not found: " + email));
+
+        if ("TEAM_LEADER".equalsIgnoreCase(currentUser.getRole())) {
+            return ResponseEntity.ok(orderService.getOrdersForTeamLead(currentUser.getUserId()));
+        }
+        return ResponseEntity.ok(orderRepository.findAll().stream()
+                .sorted(java.util.Comparator.comparing(Order::getCreatedAt, java.util.Comparator.nullsLast(java.util.Comparator.reverseOrder())))
+                .map(orderService::mapToOrderResponse)
+                .toList());
     }
 
     @PostMapping("/{orderId}/push-easyecom")
